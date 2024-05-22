@@ -1,8 +1,8 @@
 from typing import *
 from mobase import *
 if TYPE_CHECKING:
-    from PyQt5.QtWidgets import QMainWindow
-from PyQt5.QtCore import *
+    from PyQt6.QtWidgets import QMainWindow
+from PyQt6.QtCore import *
 
 from .crashlogutil import CrashLogProcessor
 from . import crashlogs

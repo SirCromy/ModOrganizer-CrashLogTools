@@ -63,113 +63,98 @@ class CrashLogProcessor():
             crash_log.write_file(log)
 
     def add_name(self, line : str, id_lookup : Dict[int, str], width : int) -> str:
-        match = STACK_PATTERN.match(line)
-        if not match:
-            return line
+        match = STACKTo fully update the Mod Organizer plugins for Skyrim crash logs to use PyQt6, you should follow these detailed steps for each relevant file:
 
-        stack_frame = match.group(0)
-        name = id_lookup.get(int(match.group("id")))
-        if not name:
-            return stack_frame + "\n"
+### Step-by-Step Solution
 
-        name = name.rstrip("_*")
-        return stack_frame.ljust(width) + name + "\n"
+1. **Replace PyQt5 with PyQt6 Imports:**
+   Update all `PyQt5` imports to `PyQt6` in your files.
+   
+2. **Adjust Code for PyQt6:**
+   Update any class and method names that have changed between PyQt5 and PyQt6.
 
-    def lookup_ids(self, id_list : List[int]) -> Dict[int, str]:
-        database = self.get_database_path()
-        if not os.path.exists(database):
-            return {}
+### File Updates
 
-        lookup = {}
-        with IdScanner(database) as scanner:
-            for addr_id in id_list:
-                name = scanner.find(addr_id)
-                if name:
-                    lookup[addr_id] = name
-        return lookup
+#### `crashloglabeler.py`
 
-class CrashLog():
-    def __init__(self, path : str):
-        self.pre_call_stack = []
-        self.call_stack = []
-        self.post_call_stack = []
-        self.changed = False
+```python
+from typing import *
+from mobase import *
+if TYPE_CHECKING:
+    from PyQt6.QtWidgets import QMainWindow
+from PyQt6.QtCore import *
 
-        self.read_file(path)
+from .crashlogutil import CrashLogProcessor
+from . import crashlogs
+from . import addresslib
 
-    def visit_call_stack(self, callback : Callable[[str], None]) -> None:
-        for line in self.call_stack:
-            callback(line)
+class CrashLogLabeler(IPlugin):
 
-    def rewrite_call_stack(self, callback : Callable[[str], str]) -> None:
-        new_call_stack = [callback(line) for line in self.call_stack]
-        if new_call_stack != self.call_stack:
-            self.changed = True
-            self.call_stack = new_call_stack
+    def __init__(self):
+        super().__init__()
 
-    def write_file(self, path : str) -> None:
-        with open(path, "w") as f:
-            f.writelines(self.pre_call_stack)
-            f.writelines(self.call_stack)
-            f.writelines(self.post_call_stack)
+    def name(self) -> str:
+        return "Crash Log Labeler"
 
-    def read_file(self, path : str) -> None:
-        with open(path, "r") as f:
-            while True:
-                line = f.readline()
-                if not line:
-                    return
+    def version(self) -> "VersionInfo":
+        return VersionInfo(1, 0, 1, 0, ReleaseType.FINAL)
 
-                self.pre_call_stack.append(line)
-                if line == "PROBABLE CALL STACK:\n":
-                    break
+    def description(self) -> str:
+        return "Labels known addresses in Skyrim crash logs"
 
-            while True:
-                line = f.readline()
-                if not line:
-                    return
+    def author(self) -> str:
+        return "Parapets"
 
-                if line == "\n":
-                    break
-                elif line == "REGISTERS:\n":
-                    self.post_call_stack.append("\n")
-                    break
+    def requirements(self) -> List["IPluginRequirement"]:
+        games = set.intersection(
+            addresslib.supported_games(),
+            crashlogs.supported_games()
+        )
 
-                self.call_stack.append(line)
+        return [
+            PluginRequirementFactory.gameDependency(games)
+        ]
 
-            while True:
-                self.post_call_stack.append(line)
+    def settings(self) -> List["PluginSetting"]:
+        return [
+            PluginSetting(
+                "offline_mode",
+                "Disable update from remote database",
+                False
+            ),
+        ]
 
-                line = f.readline()
-                if not line:
-                    return
+    def init(self, organizer : "IOrganizer") -> bool:
+        self.organizer = organizer
+        organizer.onFinishedRun(self.onFinishedRunCallback)
+        organizer.onUserInterfaceInitialized(self.onUserInterfaceInitializedCallback)
 
+        self.processed_logs = set()
 
-class IdScanner():
-    def __init__(self, database : str):
-        self.database = database
-        self.f = None
-        self.nextLine = ""
+        return True
 
-    def __enter__(self):
-        if os.path.exists(self.database):
-            self.f = open(self.database, "r")
-            self.f.readline()
-            self.nextLine = self.f.readline()
-        return self
+    def onFinishedRunCallback(self, path : str, exit_code : int):
+        new_logs = self.finder.get_crash_logs().difference(self.processed_logs)
+        if not new_logs:
+            return
 
-    def __exit__(self, exc_type, exc_value, exc_traceback):
-        if self.f:
-            self.f.close()
+        if not self.organizer.pluginSetting(self.name(), "offline_mode"):
+            self.processor.update_database()
 
-    def find(self, addr_id : int) -> str:
-        while self.nextLine:
-            line_id, name = tuple(self.nextLine.split())
-            parsed_id = int(line_id)
+        for log in new_logs:
+            self.processor.process_log(log)
 
-            if parsed_id == addr_id:
-                return name
-            elif parsed_id > addr_id:
-                return ""
+        self.processed_logs.update(new_logs)
 
-            self.nextLine = self.f.readline()
+    def onUserInterfaceInitializedCallback(self, main_window : "QMainWindow"):
+        game = self.organizer.managedGame().gameName()
+        self.finder = crashlogs.get_finder(game)
+        self.processor = CrashLogProcessor(game, lambda file : QFile(file).moveToTrash())
+
+        if not self.organizer.pluginSetting(self.name(), "offline_mode"):
+            self.processor.update_database()
+
+        logs = self.finder.get_crash_logs()
+        for log in logs:
+            self.processor.process_log(log)
+        self.processed_logs.update(logs)
