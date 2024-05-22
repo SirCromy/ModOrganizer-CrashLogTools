@@ -1,16 +1,13 @@
 import os
 import re
-from typing import (Callable, Dict, List)
-
+from typing import Callable, Dict, List
 from dulwich import porcelain as git
-
 from . import addresslib
 
-STACK_PATTERN = re.compile(
-    r"(\t\[ *\d+\] 0x[0-9A-F]+ .*\+[0-9A-F]+) -> (?P<id>\d+)\+0x[0-9A-F]+")
+STACK_PATTERN = re.compile(r"(\t\[ *\d+\] 0x[0-9A-F]+ .*\+[0-9A-F]+) -> (?P<id>\d+)\+0x[0-9A-F]+")
 
-class CrashLogProcessor():
-    def __init__(self, game : str, delete_callback : Callable[[str], None]):
+class CrashLogProcessor:
+    def __init__(self, game: str, delete_callback: Callable[[str], None]):
         self.database = addresslib.get_database(game)
         self.git_repo = os.path.join(os.path.dirname(__file__), game)
         self.delete_callback = delete_callback
@@ -21,7 +18,8 @@ class CrashLogProcessor():
                 git.clone(
                     self.database.remote,
                     self.git_repo,
-                    branch=self.database.branch)
+                    branch=self.database.branch
+                )
             except git.Error:
                 pass
 
@@ -37,9 +35,8 @@ class CrashLogProcessor():
     def get_database_path(self) -> str:
         return os.path.join(self.git_repo, self.database.database_file)
 
-    def process_log(self, log : str) -> None:
+    def process_log(self, log: str) -> None:
         crash_log = CrashLog(log)
-
         addr_ids = set()
         width = 0
         for line in crash_log.call_stack:
@@ -51,110 +48,112 @@ class CrashLogProcessor():
 
         if not addr_ids:
             return
-        id_list = sorted(addr_ids)
 
+        id_list = sorted(addr_ids)
         id_lookup = self.lookup_ids(id_list)
         if not id_lookup:
             return
 
-        crash_log.rewrite_call_stack(lambda line : self.add_name(line, id_lookup, width))
+        crash_log.rewrite_call_stack(lambda line: self.add_name(line, id_lookup, width))
         if crash_log.changed:
             self.delete_callback(log)
             crash_log.write_file(log)
 
-    def add_name(self, line : str, id_lookup : Dict[int, str], width : int) -> str:
-        match = STACKTo fully update the Mod Organizer plugins for Skyrim crash logs to use PyQt6, you should follow these detailed steps for each relevant file:
+    def add_name(self, line: str, id_lookup: Dict[int, str], width: int) -> str:
+        match = STACK_PATTERN.match(line)
+        if not match:
+            return line
+        stack_frame = match.group(0)
+        name = id_lookup.get(int(match.group("id")))
+        if not name:
+            return stack_frame + "\n"
+        name = name.rstrip("_*")
+        return stack_frame.ljust(width) + name + "\n"
 
-### Step-by-Step Solution
+    def lookup_ids(self, id_list: List[int]) -> Dict[int, str]:
+        database = self.get_database_path()
+        if not os.path.exists(database):
+            return {}
+        lookup = {}
+        with IdScanner(database) as scanner:
+            for addr_id in id_list:
+                name = scanner.find(addr_id)
+                if name:
+                    lookup[addr_id] = name
+        return lookup
 
-1. **Replace PyQt5 with PyQt6 Imports:**
-   Update all `PyQt5` imports to `PyQt6` in your files.
-   
-2. **Adjust Code for PyQt6:**
-   Update any class and method names that have changed between PyQt5 and PyQt6.
+class CrashLog:
+    def __init__(self, path: str):
+        self.pre_call_stack = []
+        self.call_stack = []
+        self.post_call_stack = []
+        self.changed = False
+        self.read_file(path)
 
-### File Updates
+    def visit_call_stack(self, callback: Callable[[str], None]) -> None:
+        for line in self.call_stack:
+            callback(line)
 
-#### `crashloglabeler.py`
+    def rewrite_call_stack(self, callback: Callable[[str], str]) -> None:
+        new_call_stack = [callback(line) for line in self.call_stack]
+        if new_call_stack != self.call_stack:
+            self.changed = True
+            self.call_stack = new_call_stack
 
-```python
-from typing import *
-from mobase import *
-if TYPE_CHECKING:
-    from PyQt6.QtWidgets import QMainWindow
-from PyQt6.QtCore import *
+    def write_file(self, path: str) -> None:
+        with open(path, "w") as f:
+            f.writelines(self.pre_call_stack)
+            f.writelines(self.call_stack)
+            f.writelines(self.post_call_stack)
 
-from .crashlogutil import CrashLogProcessor
-from . import crashlogs
-from . import addresslib
+    def read_file(self, path: str) -> None:
+        with open(path, "r") as f:
+            while True:
+                line = f.readline()
+                if not line:
+                    return
+                self.pre_call_stack.append(line)
+                if line == "PROBABLE CALL STACK:\n":
+                    break
+            while True:
+                line = f.readline()
+                if not line:
+                    return
+                if line == "\n":
+                    break
+                elif line == "REGISTERS:\n":
+                    self.post_call_stack.append("\n")
+                    break
+                self.call_stack.append(line)
+            while True:
+                self.post_call_stack.append(line)
+                line = f.readline()
+                if not line:
+                    return
 
-class CrashLogLabeler(IPlugin):
+class IdScanner:
+    def __init__(self, database: str):
+        self.database = database
+        self.f = None
+        self.nextLine = ""
 
-    def __init__(self):
-        super().__init__()
+    def __enter__(self):
+        if os.path.exists(self.database):
+            self.f = open(self.database, "r")
+            self.f.readline()
+            self.nextLine = self.f.readline()
+        return self
 
-    def name(self) -> str:
-        return "Crash Log Labeler"
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        if self.f:
+            self.f.close()
 
-    def version(self) -> "VersionInfo":
-        return VersionInfo(1, 0, 1, 0, ReleaseType.FINAL)
-
-    def description(self) -> str:
-        return "Labels known addresses in Skyrim crash logs"
-
-    def author(self) -> str:
-        return "Parapets"
-
-    def requirements(self) -> List["IPluginRequirement"]:
-        games = set.intersection(
-            addresslib.supported_games(),
-            crashlogs.supported_games()
-        )
-
-        return [
-            PluginRequirementFactory.gameDependency(games)
-        ]
-
-    def settings(self) -> List["PluginSetting"]:
-        return [
-            PluginSetting(
-                "offline_mode",
-                "Disable update from remote database",
-                False
-            ),
-        ]
-
-    def init(self, organizer : "IOrganizer") -> bool:
-        self.organizer = organizer
-        organizer.onFinishedRun(self.onFinishedRunCallback)
-        organizer.onUserInterfaceInitialized(self.onUserInterfaceInitializedCallback)
-
-        self.processed_logs = set()
-
-        return True
-
-    def onFinishedRunCallback(self, path : str, exit_code : int):
-        new_logs = self.finder.get_crash_logs().difference(self.processed_logs)
-        if not new_logs:
-            return
-
-        if not self.organizer.pluginSetting(self.name(), "offline_mode"):
-            self.processor.update_database()
-
-        for log in new_logs:
-            self.processor.process_log(log)
-
-        self.processed_logs.update(new_logs)
-
-    def onUserInterfaceInitializedCallback(self, main_window : "QMainWindow"):
-        game = self.organizer.managedGame().gameName()
-        self.finder = crashlogs.get_finder(game)
-        self.processor = CrashLogProcessor(game, lambda file : QFile(file).moveToTrash())
-
-        if not self.organizer.pluginSetting(self.name(), "offline_mode"):
-            self.processor.update_database()
-
-        logs = self.finder.get_crash_logs()
-        for log in logs:
-            self.processor.process_log(log)
-        self.processed_logs.update(logs)
+    def find(self, addr_id: int) -> str:
+        while self.nextLine:
+            line_id, name = tuple(self.nextLine.split())
+            parsed_id = int(line_id)
+            if parsed_id == addr_id:
+                return name
+            elif parsed_id > addr_id:
+                return ""
+            self.nextLine = self.f.readline()
