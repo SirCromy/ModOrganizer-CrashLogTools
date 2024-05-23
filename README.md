@@ -5,26 +5,65 @@ These are plugins for [Mod Organizer 2](https://www.modorganizer.org/) that prov
 ## Plugins
 
 ### Crash Log Labeler
-
 Attempts to label known functions in the call stack by looking them up from [Address Library Database](https://github.com/meh321/AddressLibraryDatabase).
 
 When you start Mod Organizer with the plugin installed, it will pull the database and try to label any crash logs already in your log directory. If your game crashes thereafter, it will scan for a new log file and try to label it as well. If you wish to restore the original logs, they can be found in the Recycle Bin.
 
 #### Settings
-
 **offline_mode**  
 Disables automatic updates from the remote database.
 
 ### Crash Log Viewer
-
 Adds a GUI dialog that allows you to easily access your crash logs.
 
 The tool can be started from the Tool Plugins menu.
 
-## Packaging from source
-
+## Packaging from Source
 External libraries need to be acquired and installed to the `lib` subdirectory of the plugin.
 ```bash
-git clone https://github.com/Exit-9B/ModOrganizer-CrashLogTools
+git clone https://github.com/SirCromy/ModOrganizer-CrashLogTools
 cd ModOrganizer-CrashLogTools
 pip install -r plugin-requirements.txt -t crashlogtools/lib
+
+Installation
+
+The scripts should be installed to a subdirectory in the Mod Organizer plugins folder. The resulting folder hierarchy should be <MO2 DIR>\plugins\crashlogtools.
+Requirements
+
+    Python 3.6+
+    PyQt6
+    Dulwich
+
+Installation Instructions
+
+To install the necessary dependencies, run:
+
+pip install -r plugin-requirements.txt
+
+Ensure you have PyQt6 installed:
+
+pip install PyQt6
+
+Usage
+
+    Place the crashlogtools folder in the plugins directory of MO2.
+    Start MO2.
+    Use the Crash Log Tools from the MO2 interface to analyze and label your crash logs.
+
+Contributing
+
+Please read CONTRIBUTING.md for details on our code of conduct and the process for submitting pull requests.
+License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+Acknowledgments
+
+Special thanks to the original author, Exit-9B, for their initial work on this project. Your contributions laid the foundation for this tool.
+
+
+### Updated `plugin-requirements.txt`
+
+```plaintext
+PyQt6==6.5.0
+dulwich==0.22.2
+
