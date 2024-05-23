@@ -1,1 +1,2 @@
-dulwich==0.20.35
+PyQt6
+dulwich==0.22.1

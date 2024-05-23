@@ -1,5 +1,6 @@
 from typing import *
 from mobase import *
+from crashlogtools.crashlogutil import CrashLogProcessor
 if TYPE_CHECKING:
     from PyQt6.QtWidgets import QMainWindow
 from PyQt6.QtCore import *
